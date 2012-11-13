@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Enum Generator for Dart</title>
+<style type="text/css">
+  .class #classEnumFlags { display: inline;}
+  .int #classEnumFlags { display: none;}
+  .class #intEnumFlags { display: none;}
+  .int #intEnumFlags { display: inline;}
+  #output { border: none ;}
+</style>
+<script>
+  function outputText(text) {
+    // Inefficient.
+    var lines = text.split(/\n/g);
+    var maxLength =
+       Math.max.apply(Math,
+                      lines.map(function (l) { return l.length; }));
+    var output = document.getElementById("output");
+    output.value = text;
+    output.cols = maxLength + 1;
+    output.rows = lines.length;
+  }
+  var FLAG_WRAP_IN_CLASS = 1;
+  var FLAG_TOSTRING = 2;
+  var FLAG_VALUES = 4;
+  var FLAG_HASHCODE = 8;
+  function generateClassEnum(name, items, flags) {
+    var result = "class " + name + " {\n"
+    function generateItems(indent) {
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        result += indent + "static const " + name + " " + item +
+                  " = const " + name +"._(";
+        if (flags & FLAG_TOSTRING) {
+          result += '"' + item + '"';
+          if (flags & FLAG_HASHCODE) {
+            result += ", ";
+          }
+        }
+        if (flags & FLAG_HASHCODE) {
+          result += i;
+        }
+        result += ");\n";
+      }
+    }
+    if (flags & FLAG_WRAP_IN_CLASS) {
+      generateItems("  ");
+    }
+    if (flags & FLAG_VALUES) {
+      result += "  static const List<" + name + "> values = const <" + name + ">[";
+      result += items.join(", ") + "];\n";
+    }
+    if (flags & FLAG_TOSTRING) {
+      result += "  final String _name;\n";
+    }
+    if (flags & FLAG_HASHCODE) {
+      result += "  final int hashCode;\n";
+    }
+    result += "  const " + name + "._(";
+    if (flags & FLAG_TOSTRING) {
+      result += "this._name";
+      if (flags & FLAG_HASHCODE) {
+        result += ", ";
+      }
+    }
+    if (flags & FLAG_HASHCODE) {
+      result += "this.hashCode";
+    }
+    result += ");\n";
+    if (flags & FLAG_TOSTRING) {
+      result += "  String toString() => _name;\n";
+    }
+    result += "}\n";
+    if (!(flags & FLAG_WRAP_IN_CLASS)) {
+      generateItems("");
+    }
+    return result;
+  }
+  var FLAG_BITFLAGS = 2;
+  var FLAG_START_VALUE = 4;
+  function generateIntEnum(name, items, flags) {
+    var num = (flags / FLAG_START_VALUE) | 0;
+    var bitflags = (flags & FLAG_BITFLAGS) != 0;
+    var wrapped = (flags & FLAG_WRAP_IN_CLASS) != 0;
+    var indent = "";
+    var result = "";
+    var stat = "";
+    if (wrapped) {
+      result += "class " + name + " {\n";
+      indent = "  ";
+      stat = "static "
+    }
+    for (var i = 0; i < items.length; i++) {
+      var value = num;
+      if (bitflags) value = 1 << value;
+      result += indent + stat + "const int " + items[i] + " = "
+              + value + ";\n";
+      num += 1;
+    }
+    if (wrapped) {
+      result += "}\n";
+    }
+    return result;
+  }
+  function generate() {
+    var config=[];
+    function $(id) {
+      var elem = document.getElementById(id);
+      var value, defaultValue;
+      if (elem.type == "checkbox") {
+        value = elem.checked;
+        defaultValue = elem.defaultChecked;
+      } else if (elem.tagName.toLowerCase() == "select") {
+        value = elem.value;
+        if (elem.options[elem.selectedIndex].defaultSelected) {
+          defaultValue = value;
+        }
+      } else {
+        value = elem.value;
+        defaultValue = elem.defaultValue;
+      }
+      if (value != defaultValue) {
+        config.push(id + "=" + encodeURIComponent(value));
+      }
+      return value;
+    }
+    var name = $("enumName").trim();
+    var itemText = $("enumItems");
+    var re = /\w+/g;
+    var items = [];
+    for (var m; (m = re.exec(itemText));) {
+      items.push(m[0]);
+    }
+    var flags = 0;
+    flags |= $("enumWrap") * FLAG_WRAP_IN_CLASS;
+    if ($("enumType") == "class") {
+      flags |= $("enumToString") * FLAG_TOSTRING;
+      flags |= $("enumValueList") * FLAG_VALUES;
+      flags |= $("enumHashCode") * FLAG_HASHCODE;
+      outputText(generateClassEnum(name, items, flags));
+    } else {
+      flags |= $("enumBitFlags") * FLAG_BITFLAGS;
+      var start = +$("enumStartValue") || 0;
+      flags |= start * FLAG_START_VALUE;
+      outputText(generateIntEnum(name, items, flags));
+    }
+    location.replace("#" + config.join("&"));
+  }
+  function selectFlags(select) {
+    document.getElementById('flags').className = select.value;
+  }
+  function init() {
+    var config;
+    if (location.search != "") {
+      config = location.search;
+    } else if (location.hash != "") {
+      config = location.hash;
+    }
+    if (config) {
+      var parts = config.substring(1).split(/&/g);
+      for (var i = 0; i < parts.length; i++) {
+        var name = parts[i];
+        var value = true;
+        var n = name.indexOf("=");
+        if (n >= 0) {
+          value = decodeURIComponent(name.substring(n + 1));
+          name = name.substring(0, n);
+        }
+        var elem = document.getElementById(name);
+        if (elem != null) {
+          if (typeof value == "string") {
+            elem.value = value;
+          } else {
+            elem.checked = value;
+          }
+        }
+        selectFlags(document.getElementById("enumType"))
+      }
+    }
+    generate();
+  }
+  window.addEventListener("load", init, false);
+</script>
+</head>
+<body>
+<form action="GET" onsubmit="generate()">
+<fieldset><legend>Enum Generator</legend>
+<div><label for="enumName">Name: <input type="text" value="Planet" id="enumName" name="enumName" onchange="generate()"></label><br>
+<label for="enumItems" title="space/comma separated identifiers">Items:
+<input type="text" value="mercury, venus, earth, mars, saturn, jupiter, uranus, neptune" id="enumItems" size="80" onchange="generate()"></label><br>
+<label for="enumType">Type of enum: <select id="enumType"
+  name="enumType"
+  onchange="selectFlags(this); generate()">
+  <option value="class" selected="selected">Class based enum</option>
+  <option value="int">Integer based enum</option>
+</select></label>
+<span id="flags" class="class">
+<span id="classEnumFlags">
+  <label for="enumToString">
+    <input type="checkbox" id="enumToString" name="enumToString"
+           checked="checked" onchange="generate()">
+    toString method
+  </label>
+  <label for="enumValueList">
+    <input type="checkbox" id="enumValueList" name="enumValueList"
+           checked="checked" onchange="generate()">
+    values List
+  </label>
+  <label for="enumHashCode">
+    <input type="checkbox" id="enumHashCode" name="enumHashCode"
+           onchange="generate()">
+    hashCode
+  </label>
+</span>
+<span id="intEnumFlags">
+  <label for="enumStart">Start number:
+    <input type="text" value="0" id="enumStartValue"
+           name="enumStartValue" onchange="generate()">
+  </label>
+  <label for="enumBitFlags">
+    <input type="checkbox" id="enumBitFlags" name="enumBitFlags"
+           onchange="generate()">
+    As bit flags
+  </label>
+</span>
+<label for="enumWrap">
+  <input type="checkbox" id="enumWrap" name="enumWrap"
+         checked="checked" onchange="generate()">
+  Wrap in class.
+</label>
+</span>
+</fieldset>
+</form>
+<div><textarea readonly="readonly" id="output" rows="5" cols="80"></textarea></div>
+</body>
