@@ -38,7 +38,7 @@
             result += ", ";
           }
         }
-        if (flags & FLAG_HASHCODE) {
+        if ((flags & FLAG_HASHCODE) || (flags & FLAG_TOSTRING) == 0) {
           result += i;
         }
         result += ");\n";
@@ -57,6 +57,9 @@
     if (flags & FLAG_HASHCODE) {
       result += "  final int hashCode;\n";
     }
+    if ((flags & (FLAG_HASHCODE | FLAG_TOSTRING)) == 0) {
+      result += "  final int _unique;\n";
+    }
     result += "  const " + name + "._(";
     if (flags & FLAG_TOSTRING) {
       result += "this._name";
@@ -66,6 +69,9 @@
     }
     if (flags & FLAG_HASHCODE) {
       result += "this.hashCode";
+    }
+    if ((flags & (FLAG_TOSTRING | FLAG_HASHCODE)) == 0) {
+      result += "this._unique";
     }
     result += ");\n";
     if (flags & FLAG_TOSTRING) {
