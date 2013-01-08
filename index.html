@@ -22,15 +22,45 @@
     output.rows = lines.length;
   }
   var FLAG_WRAP_IN_CLASS = 1;
-  var FLAG_TOSTRING = 2;
-  var FLAG_VALUES = 4;
-  var FLAG_HASHCODE = 8;
+  var FLAG_CONST_NAMES = 2;
+  var FLAG_TOSTRING = 4;
+  var FLAG_VALUES = 8;
+  var FLAG_HASHCODE = 16;
+
+  function constName(item, asConst) {
+    var result;
+    if (asConst) {
+      result = item.replace(/([^a-z\d]*)([a-z\d])|./gi, function (m, s1, s2) {
+        var result = "";
+        if (s2) result = s2.toUpperCase();
+        if (s1) result = "_" + result;
+        return result;
+      });
+    } else {
+      result = item.replace(/[^\w]/g, "");
+    }
+    if (/^\d/.test(result)) {
+      // Ugly fallback if user starts name with a digit.
+      result = "C_" + result;
+    }
+    return result;
+  }
+
   function generateClassEnum(name, items, flags) {
+    var wrapped = (flags & FLAG_WRAP_IN_CLASS) != 0;
+    var constNames = (flags & FLAG_CONST_NAMES) != 0;
     var result = "class " + name + " {\n"
+    var itemNames = [];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var itemName = itemName = constName(item, constNames);
+      itemNames.push(itemName);
+    }
     function generateItems(indent) {
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        result += indent + "static const " + name + " " + item +
+        var itemName = itemNames[i];
+        result += indent + "static const " + name + " " + itemName +
                   " = const " + name +"._(";
         if (flags & FLAG_TOSTRING) {
           result += '"' + item + '"';
@@ -44,12 +74,13 @@
         result += ");\n";
       }
     }
-    if (flags & FLAG_WRAP_IN_CLASS) {
+    if (wrapped) {
       generateItems("  ");
     }
     if (flags & FLAG_VALUES) {
-      result += "  static const List<" + name + "> values = const <" + name + ">[";
-      result += items.join(", ") + "];\n";
+      result += "  static const List<" + name + "> values = ";
+      // TODO: break line if too long.
+      result += "const <" + name + ">[" + itemNames.join(", ") + "];\n";
     }
     if (flags & FLAG_TOSTRING) {
       result += "  final String _name;\n";
@@ -78,17 +109,18 @@
       result += "  String toString() => _name;\n";
     }
     result += "}\n";
-    if (!(flags & FLAG_WRAP_IN_CLASS)) {
+    if (!wrapped) {
       generateItems("");
     }
     return result;
   }
-  var FLAG_BITFLAGS = 2;
-  var FLAG_START_VALUE = 4;
+  var FLAG_BITFLAGS = 4;
+  var FLAG_START_VALUE = 8;
   function generateIntEnum(name, items, flags) {
     var num = (flags / FLAG_START_VALUE) | 0;
     var bitflags = (flags & FLAG_BITFLAGS) != 0;
     var wrapped = (flags & FLAG_WRAP_IN_CLASS) != 0;
+    var constNames = (flags & FLAG_CONST_NAMES) != 0;
     var indent = "";
     var result = "";
     var stat = "";
@@ -100,7 +132,9 @@
     for (var i = 0; i < items.length; i++) {
       var value = num;
       if (bitflags) value = 1 << value;
-      result += indent + stat + "const int " + items[i] + " = "
+      var item = items[i];
+      var itemName = constName(item, constNames);
+      result += indent + stat + "const int " + itemName + " = "
               + value + ";\n";
       num += 1;
     }
@@ -133,13 +167,17 @@
     }
     var name = $("enumName").trim();
     var itemText = $("enumItems");
-    var re = /\w+/g;
-    var items = [];
-    for (var m; (m = re.exec(itemText));) {
-      items.push(m[0]);
+    var items;
+    if (itemText.indexOf(",") >= 0) {
+      // If there is a comma, it's comma-separated.
+      items = itemText.split(/\s*,\s*/g);
+    } else {
+      // Otherwise it's just the identifiers.
+      items = itemText.match(/[a-zA-Z_]\w+/g);
     }
     var flags = 0;
     flags |= $("enumWrap") * FLAG_WRAP_IN_CLASS;
+    flags |= $("enumConstNames") * FLAG_CONST_NAMES;
     if ($("enumType") == "class") {
       flags |= $("enumToString") * FLAG_TOSTRING;
       flags |= $("enumValueList") * FLAG_VALUES;
@@ -234,6 +272,11 @@
   <input type="checkbox" id="enumWrap" name="enumWrap"
          checked="checked" onchange="generate()">
   Wrap in class.
+</label>
+<label for="enumConstNames">
+  <input type="checkbox" id="enumConstNames" name="enumConstNames"
+         checked="checked" onchange="generate()">
+  Names as CONST_NAME.
 </label>
 </span>
 </fieldset>
